@@ -1,0 +1,101 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+* {
+  box-sizing: border-box;
+}
+
+html, body, #root {
+  height: 100%;
+  width: 100%;
+  margin: 0;
+  padding: 0;
+}
+
+/* ノードハンドル: 常に表示、控えめなドット */
+.idea-node .react-flow__handle {
+  background: #fff !important;
+  border: 1.5px solid var(--node-color, #3b82f6) !important;
+  border-radius: 50% !important;
+  width: 10px !important;
+  height: 10px !important;
+  transition: background 0.15s, width 0.15s, height 0.15s;
+  z-index: 10;
+}
+
+/* ハンドルの当たり判定を辺全体に広げる */
+.idea-node .react-flow__handle::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+}
+
+/* 上下ハンドル: 横方向に広げる */
+.idea-node .react-flow__handle-top::after,
+.idea-node .react-flow__handle-bottom::after {
+  width: 120px;
+  height: 24px;
+}
+
+/* 左右ハンドル: 縦方向に広げる */
+.idea-node .react-flow__handle-left::after,
+.idea-node .react-flow__handle-right::after {
+  width: 24px;
+  height: 80px;
+}
+
+/* 選択中ノードのハンドル: 選択色＋白枠 */
+.idea-node--selected .react-flow__handle {
+  background: var(--node-color, #3b82f6) !important;
+  border-color: #fff !important;
+}
+
+/* ハンドルホバー: ノードの色に合わせて拡大 */
+.idea-node .react-flow__handle:hover {
+  background: var(--node-color, #3b82f6) !important;
+  width: 14px !important;
+  height: 14px !important;
+}
+
+/* 選択確定後の枠を非表示・クリック透過（ドラッグ中の青い範囲は表示） */
+.react-flow__nodesselection-rect {
+  background: transparent !important;
+  border: none !important;
+  pointer-events: none !important;
+}
+
+/* エッジのクリック範囲を広げる */
+.react-flow__edge-interaction {
+  stroke-width: 30px;
+}
+
+/* 新規接続ドラッグ中の線: 点線+アニメーション */
+.react-flow__connection-path {
+  stroke-dasharray: 6 4 !important;
+  stroke-width: 2.5 !important;
+  animation: connection-flow 0.8s linear infinite;
+}
+
+@keyframes connection-flow {
+  to {
+    stroke-dashoffset: -14;
+  }
+}
+
+/* 左下コントロールを大きく */
+.react-flow__controls {
+  box-shadow: 0 2px 8px rgba(0,0,0,0.12);
+  border-radius: 10px;
+  overflow: hidden;
+}
+.react-flow__controls-button {
+  width: 44px !important;
+  height: 44px !important;
+}
+.react-flow__controls-button svg {
+  width: 20px !important;
+  height: 20px !important;
+}
