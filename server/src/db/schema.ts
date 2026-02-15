@@ -12,7 +12,7 @@ export function initDB() {
     CREATE TABLE IF NOT EXISTS nodes (
       id TEXT PRIMARY KEY,
       project_id TEXT NOT NULL,
-      parent_id TEXT,
+      tree_parent_id TEXT,
       label TEXT NOT NULL DEFAULT '',
       description TEXT NOT NULL DEFAULT '',
       color TEXT NOT NULL DEFAULT '#3b82f6',
@@ -20,6 +20,10 @@ export function initDB() {
       position_x REAL NOT NULL DEFAULT 0,
       position_y REAL NOT NULL DEFAULT 0,
       ai_conversation TEXT NOT NULL DEFAULT '[]',
+      node_type TEXT NOT NULL DEFAULT 'idea',
+      group_id TEXT DEFAULT NULL,
+      width REAL DEFAULT NULL,
+      height REAL DEFAULT NULL,
       FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
     );
 
@@ -42,5 +46,24 @@ export function initDB() {
   } catch {}
   try {
     db.exec(`ALTER TABLE edges ADD COLUMN target_handle TEXT NOT NULL DEFAULT 'left'`);
+  } catch {}
+
+  // マイグレーション: parent_id → tree_parent_id リネーム
+  try {
+    db.exec(`ALTER TABLE nodes RENAME COLUMN parent_id TO tree_parent_id`);
+  } catch {}
+
+  // マイグレーション: グループ用カラム追加
+  try {
+    db.exec(`ALTER TABLE nodes ADD COLUMN node_type TEXT NOT NULL DEFAULT 'idea'`);
+  } catch {}
+  try {
+    db.exec(`ALTER TABLE nodes ADD COLUMN group_id TEXT DEFAULT NULL`);
+  } catch {}
+  try {
+    db.exec(`ALTER TABLE nodes ADD COLUMN width REAL DEFAULT NULL`);
+  } catch {}
+  try {
+    db.exec(`ALTER TABLE nodes ADD COLUMN height REAL DEFAULT NULL`);
   } catch {}
 }

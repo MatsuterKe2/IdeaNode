@@ -1,21 +1,21 @@
 import { memo, useState, useRef, useEffect, useCallback } from 'react';
-import { Handle, Position, type NodeProps } from '@xyflow/react';
+import { Handle, Position, NodeResizer, type NodeProps } from '@xyflow/react';
 import type { IdeaFlowNode } from '../types';
 import { useMindMapStore } from '../store/mindMapStore';
 
-function IdeaNode({ id, data, selected }: NodeProps<IdeaFlowNode>) {
+function GroupNode({ id, data, selected }: NodeProps<IdeaFlowNode>) {
   const [editing, setEditing] = useState(false);
   const [editValue, setEditValue] = useState(data.label);
-  const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
   const updateNodeLabel = useMindMapStore((s) => s.updateNodeLabel);
   const setContextMenu = useMindMapStore((s) => s.setContextMenu);
   const addNodeFromHandle = useMindMapStore((s) => s.addNodeFromHandle);
+  const updateGroupSize = useMindMapStore((s) => s.updateGroupSize);
 
   useEffect(() => {
-    if (editing && textareaRef.current) {
-      textareaRef.current.focus();
-      textareaRef.current.select();
-      autoResize(textareaRef.current);
+    if (editing && inputRef.current) {
+      inputRef.current.focus();
+      inputRef.current.select();
     }
   }, [editing]);
 
@@ -23,14 +23,9 @@ function IdeaNode({ id, data, selected }: NodeProps<IdeaFlowNode>) {
     setEditValue(data.label);
   }, [data.label]);
 
-  const autoResize = (el: HTMLTextAreaElement) => {
-    el.style.height = 'auto';
-    el.style.height = el.scrollHeight + 'px';
-  };
-
   const commitEdit = useCallback(() => {
     setEditing(false);
-    updateNodeLabel(id, editValue || 'Untitled');
+    updateNodeLabel(id, editValue || 'グループ');
   }, [id, editValue, updateNodeLabel]);
 
   const handleDoubleClick = (e: React.MouseEvent) => {
@@ -52,6 +47,10 @@ function IdeaNode({ id, data, selected }: NodeProps<IdeaFlowNode>) {
     });
   };
 
+  const handleResizeEnd = useCallback((_event: unknown, params: { width: number; height: number }) => {
+    updateGroupSize(id, params.width, params.height);
+  }, [id, updateGroupSize]);
+
   const handleHandleDoubleClick = useCallback((handleId: string) => (e: React.MouseEvent) => {
     e.stopPropagation();
     e.preventDefault();
@@ -62,22 +61,28 @@ function IdeaNode({ id, data, selected }: NodeProps<IdeaFlowNode>) {
 
   return (
     <div
-      className={`idea-node relative rounded-xl transition-shadow duration-150 ${
-        selected ? 'shadow-lg idea-node--selected' : 'shadow-sm hover:shadow-md'
-      }`}
+      className={`group-node ${selected ? 'group-node--selected' : ''}`}
       style={{
-        background: selected ? color : '#fff',
-        border: selected ? `3px solid ${color}` : `2px solid ${color}`,
-        outline: selected ? '3px solid #fff' : 'none',
-        outlineOffset: '-6px',
-        minWidth: 140,
-        maxWidth: 280,
         '--node-color': color,
+        width: '100%',
+        height: '100%',
+        background: `${color}12`,
+        borderColor: color,
       } as React.CSSProperties}
       onDoubleClick={handleDoubleClick}
       onContextMenu={handleContextMenu}
     >
-      {/* 4方向ハンドル — source兼targetで接続開始も受け入れも可能 */}
+      <NodeResizer
+        color="transparent"
+        handleStyle={{ opacity: 0 }}
+        lineStyle={{ borderColor: 'transparent' }}
+        isVisible={true}
+        minWidth={150}
+        minHeight={100}
+        onResizeEnd={handleResizeEnd}
+      />
+
+      {/* 4方向ハンドル */}
       <Handle type="source" position={Position.Top} id="top"
         isConnectableStart isConnectableEnd onDoubleClick={handleHandleDoubleClick('top')} />
       <Handle type="source" position={Position.Bottom} id="bottom"
@@ -87,35 +92,28 @@ function IdeaNode({ id, data, selected }: NodeProps<IdeaFlowNode>) {
       <Handle type="source" position={Position.Right} id="right"
         isConnectableStart isConnectableEnd onDoubleClick={handleHandleDoubleClick('right')} />
 
-      <div className="px-5 py-3">
+      {/* ヘッダー */}
+      <div className="group-node__header" onDoubleClick={handleDoubleClick}>
         {editing ? (
-          <textarea
-            ref={textareaRef}
+          <input
+            ref={inputRef}
             value={editValue}
-            onChange={(e) => {
-              setEditValue(e.target.value);
-              autoResize(e.target);
-            }}
+            onChange={(e) => setEditValue(e.target.value)}
             onBlur={commitEdit}
             onKeyDown={(e) => {
-              if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); commitEdit(); }
+              if (e.key === 'Enter') commitEdit();
               if (e.key === 'Escape') { setEditing(false); setEditValue(data.label); }
             }}
-            rows={1}
-            className="w-full border-none outline-none bg-transparent font-medium text-center resize-none overflow-hidden"
-            style={{ color: selected ? '#fff' : '#1e293b', fontSize: 18 }}
+            className="group-node__input"
           />
         ) : (
-          <div
-            className="font-medium text-center whitespace-pre-wrap break-words"
-            style={{ color: selected ? '#fff' : '#1e293b', fontSize: 18 }}
-          >
-            {data.label || 'Untitled'}
-          </div>
+          <span className="group-node__label">
+            {data.label || 'グループ'}
+          </span>
         )}
       </div>
     </div>
   );
 }
 
-export default memo(IdeaNode);
+export default memo(GroupNode);

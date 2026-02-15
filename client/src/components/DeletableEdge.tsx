@@ -1,6 +1,8 @@
 import { BaseEdge, getBezierPath, type EdgeProps } from '@xyflow/react';
+import { useMindMapStore } from '../store/mindMapStore';
 
 export default function DeletableEdge({
+  id,
   sourceX,
   sourceY,
   targetX,
@@ -11,6 +13,9 @@ export default function DeletableEdge({
   markerEnd,
   selected,
 }: EdgeProps) {
+  const selectedEdgeId = useMindMapStore((s) => s.selectedEdgeId);
+  const isSelected = selected || id === selectedEdgeId;
+
   const [edgePath] = getBezierPath({
     sourceX,
     sourceY,
@@ -26,7 +31,7 @@ export default function DeletableEdge({
       markerEnd={markerEnd}
       style={{
         ...style,
-        ...(selected ? { stroke: '#ef4444' } : {}),
+        ...(isSelected ? { stroke: '#ef4444' } : {}),
       }}
     />
   );

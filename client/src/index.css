@@ -14,7 +14,8 @@ html, body, #root {
 }
 
 /* ノードハンドル: 常に表示、控えめなドット */
-.idea-node .react-flow__handle {
+.idea-node .react-flow__handle,
+.group-node .react-flow__handle {
   background: #fff !important;
   border: 1.5px solid var(--node-color, #3b82f6) !important;
   border-radius: 50% !important;
@@ -25,7 +26,8 @@ html, body, #root {
 }
 
 /* ハンドルの当たり判定を辺全体に広げる */
-.idea-node .react-flow__handle::after {
+.idea-node .react-flow__handle::after,
+.group-node .react-flow__handle::after {
   content: '';
   position: absolute;
   top: 50%;
@@ -35,26 +37,32 @@ html, body, #root {
 
 /* 上下ハンドル: 横方向に広げる */
 .idea-node .react-flow__handle-top::after,
-.idea-node .react-flow__handle-bottom::after {
+.idea-node .react-flow__handle-bottom::after,
+.group-node .react-flow__handle-top::after,
+.group-node .react-flow__handle-bottom::after {
   width: 120px;
   height: 24px;
 }
 
 /* 左右ハンドル: 縦方向に広げる */
 .idea-node .react-flow__handle-left::after,
-.idea-node .react-flow__handle-right::after {
+.idea-node .react-flow__handle-right::after,
+.group-node .react-flow__handle-left::after,
+.group-node .react-flow__handle-right::after {
   width: 24px;
   height: 80px;
 }
 
 /* 選択中ノードのハンドル: 選択色＋白枠 */
-.idea-node--selected .react-flow__handle {
+.idea-node--selected .react-flow__handle,
+.group-node--selected .react-flow__handle {
   background: var(--node-color, #3b82f6) !important;
   border-color: #fff !important;
 }
 
 /* ハンドルホバー: ノードの色に合わせて拡大 */
-.idea-node .react-flow__handle:hover {
+.idea-node .react-flow__handle:hover,
+.group-node .react-flow__handle:hover {
   background: var(--node-color, #3b82f6) !important;
   width: 14px !important;
   height: 14px !important;
@@ -98,4 +106,152 @@ html, body, #root {
 .react-flow__controls-button svg {
   width: 20px !important;
   height: 20px !important;
+}
+
+/* ======================== */
+/* グループノードスタイル     */
+/* ======================== */
+
+/* React Flow デフォルトの選択枠を消す（selected 含む） */
+.react-flow__node-group,
+.react-flow__node-group.selected {
+  border: none !important;
+  box-shadow: none !important;
+  outline: none !important;
+  background: transparent !important;
+  padding: 0 !important;
+}
+
+/* グループ非選択時: 本体を透過し、ヘッダー・ハンドル・リサイザーだけ操作可能 */
+.react-flow__node-group:not(.selected) {
+  pointer-events: none !important;
+}
+.react-flow__node-group:not(.selected) .group-node__header,
+.react-flow__node-group:not(.selected) .react-flow__handle,
+.react-flow__node-group:not(.selected) .react-flow__resize-control {
+  pointer-events: auto !important;
+}
+
+/* グループ選択時: 全体を掴んで移動可能 */
+.react-flow__node-group.selected {
+  pointer-events: auto !important;
+}
+
+/* NodeResizer: コーナーハンドルは透明だが掴める */
+.group-node .react-flow__resize-control.handle {
+  opacity: 0 !important;
+  width: 14px !important;
+  height: 14px !important;
+}
+
+/* ライン（辺）リサイズ: 当たり判定を太く */
+.group-node .react-flow__resize-control.line {
+  border-color: transparent !important;
+  border-width: 6px !important;
+}
+
+.group-node {
+  border: 2px dashed var(--node-color, #3b82f6);
+  border-radius: 20px;
+  position: relative;
+  min-width: 150px;
+  min-height: 100px;
+  transition: border-style 0.2s, box-shadow 0.2s, border-color 0.2s;
+  backdrop-filter: blur(2px);
+}
+
+.group-node--selected {
+  border-style: solid;
+  border-width: 2.5px;
+  box-shadow:
+    0 0 0 3px color-mix(in srgb, var(--node-color, #3b82f6) 15%, transparent),
+    0 8px 32px rgba(0, 0, 0, 0.1);
+}
+
+.group-node__header {
+  position: absolute;
+  top: 8px;
+  left: 0;
+  right: 0;
+  display: flex;
+  justify-content: center;
+  pointer-events: none;
+  user-select: none;
+  cursor: grab;
+}
+
+.group-node__header:active {
+  cursor: grabbing;
+}
+
+.group-node__label {
+  font-size: 30px;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  color: var(--node-color, #3b82f6);
+  pointer-events: auto;
+}
+
+.group-node__input {
+  border: none;
+  outline: none;
+  background: transparent;
+  text-align: center;
+  font-size: 30px;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  color: var(--node-color, #3b82f6);
+  pointer-events: auto;
+}
+
+/* ======================== */
+/* ノード追加アニメーション   */
+/* ======================== */
+/* JS側で .node-new クラスを付与したときだけ発火 */
+.react-flow__node.node-new {
+  animation: node-appear 0.25s ease-out;
+}
+
+@keyframes node-appear {
+  from {
+    opacity: 0;
+    transform: scale(0.8);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+/* ======================== */
+/* トースト通知              */
+/* ======================== */
+.toast-enter {
+  animation: toast-slide-in 0.3s ease-out;
+}
+
+.toast-exit {
+  animation: toast-slide-out 0.2s ease-in forwards;
+}
+
+@keyframes toast-slide-in {
+  from {
+    transform: translateX(100%);
+    opacity: 0;
+  }
+  to {
+    transform: translateX(0);
+    opacity: 1;
+  }
+}
+
+@keyframes toast-slide-out {
+  from {
+    transform: translateX(0);
+    opacity: 1;
+  }
+  to {
+    transform: translateX(100%);
+    opacity: 0;
+  }
 }

@@ -8,7 +8,7 @@ export interface Project {
 export interface IdeaNode {
   id: string;
   projectId: string;
-  parentId: string | null;
+  treeParentId: string | null;
   label: string;
   description: string;
   color: string;
@@ -16,6 +16,10 @@ export interface IdeaNode {
   positionX: number;
   positionY: number;
   aiConversation: ChatMessage[];
+  nodeType: 'idea' | 'group';
+  groupId: string | null;
+  width: number | null;
+  height: number | null;
 }
 
 export interface Edge {

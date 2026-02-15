@@ -1,8 +1,22 @@
 import { useState } from 'react';
 import { useMindMapStore } from '../store/mindMapStore';
 
+const SHORTCUTS = [
+  { keys: 'ダブルクリック (空白)', desc: 'ノード追加' },
+  { keys: 'ダブルクリック (ノード)', desc: 'ラベル編集' },
+  { keys: 'Tab', desc: '子ノード追加' },
+  { keys: '右クリック', desc: 'コンテキストメニュー' },
+  { keys: 'Delete / Backspace', desc: '選択項目を削除' },
+  { keys: 'Ctrl + G', desc: 'グループ化' },
+  { keys: 'Ctrl + Shift + G', desc: 'グループ解除' },
+  { keys: 'ドラッグ (空白)', desc: '範囲選択' },
+  { keys: '中ボタン ドラッグ', desc: '画面パン' },
+  { keys: 'ハンドル ダブルクリック', desc: 'ハンドル方向にノード追加' },
+];
+
 export default function Toolbar() {
   const [showProjectMenu, setShowProjectMenu] = useState(false);
+  const [showHelp, setShowHelp] = useState(false);
   const [newProjectName, setNewProjectName] = useState('');
 
   const projects = useMindMapStore((s) => s.projects);
@@ -22,7 +36,7 @@ export default function Toolbar() {
 
   return (
     <div className="h-full bg-white border-b border-gray-200 flex items-center px-5 z-30 shadow-sm flex-shrink-0">
-      <h1 style={{ fontSize: 36 }} className="font-bold text-gray-800 mr-5 leading-none">IdeaGraph</h1>
+      <h1 style={{ fontSize: 36 }} className="font-bold text-gray-800 mr-5 leading-none">IdeaNode</h1>
 
       <div className="relative">
         <button
@@ -80,8 +94,33 @@ export default function Toolbar() {
         )}
       </div>
 
-      <div className="ml-auto text-base text-gray-400">
-        ダブルクリックでノード追加 | 右クリックでメニュー
+      <div className="ml-auto relative">
+        <button
+          onClick={() => setShowHelp(!showHelp)}
+          className="w-8 h-8 rounded-full border border-gray-300 flex items-center justify-center text-gray-500 hover:bg-gray-50 hover:text-gray-700 transition-colors text-sm"
+          title="ショートカット一覧"
+        >
+          ?
+        </button>
+
+        {showHelp && (
+          <>
+            <div className="fixed inset-0 z-40" onClick={() => setShowHelp(false)} />
+            <div className="absolute top-full right-0 mt-1 w-80 bg-white rounded-lg shadow-xl border border-gray-200 z-50 py-2">
+              <div className="px-4 py-1.5 text-xs font-semibold text-gray-500 uppercase tracking-wide">
+                ショートカット
+              </div>
+              {SHORTCUTS.map((s, i) => (
+                <div key={i} className="px-4 py-1.5 flex items-center justify-between text-sm">
+                  <span className="text-gray-600">{s.desc}</span>
+                  <span className="text-xs text-gray-400 bg-gray-100 px-2 py-0.5 rounded font-mono">
+                    {s.keys}
+                  </span>
+                </div>
+              ))}
+            </div>
+          </>
+        )}
       </div>
     </div>
   );
