@@ -2,29 +2,34 @@ import { useRef, forwardRef, useImperativeHandle, useState } from 'react';
 import { useMindMapStore } from '../store/mindMapStore';
 
 export interface TrashDropZoneHandle {
-  checkDrop: (mouseX: number, mouseY: number, nodeIds: string[]) => boolean;
+  checkDrop: (nodeIds: string[]) => boolean;
   setHovering: (v: boolean) => void;
 }
 
-interface TrashDropZoneProps {
-  active: boolean;
-}
-
-const TrashDropZone = forwardRef<TrashDropZoneHandle, TrashDropZoneProps>(
-  ({ active }, ref) => {
+const TrashDropZone = forwardRef<TrashDropZoneHandle, { active: boolean }>(
+  (_props, ref) => {
     const containerRef = useRef<HTMLDivElement>(null);
     const [hovering, setHoveringState] = useState(false);
     const deleteNodeById = useMindMapStore((s) => s.deleteNodeById);
     const chatPanelOpen = useMindMapStore((s) => s.chatPanelOpen);
 
     useImperativeHandle(ref, () => ({
-      checkDrop(_mouseX: number, _mouseY: number, nodeIds: string[]) {
+      checkDrop(nodeIds: string[]) {
         const el = containerRef.current;
         if (!el) return false;
+
+        // グループノードはゴミ箱で削除しない
+        const state = useMindMapStore.getState();
+        const filteredIds = nodeIds.filter((nid) => {
+          const node = state.nodes.find((n) => n.id === nid);
+          return node?.type !== 'group';
+        });
+        if (filteredIds.length === 0) return false;
+
         const trashRect = el.getBoundingClientRect();
         // いずれかのノードがゴミ箱と重なっているか判定
         let anyOverlap = false;
-        for (const nid of nodeIds) {
+        for (const nid of filteredIds) {
           const nodeEl = document.querySelector(`[data-id="${nid}"]`) as HTMLElement | null;
           if (nodeEl) {
             const nr = nodeEl.getBoundingClientRect();
@@ -36,10 +41,10 @@ const TrashDropZone = forwardRef<TrashDropZoneHandle, TrashDropZoneProps>(
           }
         }
         if (anyOverlap) {
-          const nodeIdSet = new Set(nodeIds);
+          const nodeIdSet = new Set(filteredIds);
 
           // 各ノードについてその場で中心に向かって縮小するアニメーション
-          for (const nodeId of nodeIds) {
+          for (const nodeId of filteredIds) {
             const nodeEl = document.querySelector(`[data-id="${nodeId}"]`) as HTMLElement | null;
             if (nodeEl) {
               const nodeRect = nodeEl.getBoundingClientRect();
@@ -96,7 +101,7 @@ const TrashDropZone = forwardRef<TrashDropZoneHandle, TrashDropZoneProps>(
             }
           }, 300);
           setTimeout(() => {
-            for (const nodeId of nodeIds) {
+            for (const nodeId of filteredIds) {
               deleteNodeById(nodeId);
             }
             setHoveringState(false);

@@ -16,12 +16,12 @@ export function useAIChat() {
       const node = nodes.find((n) => n.id === nodeId);
       if (!node) return;
 
-      const parentNode = node.data.parentId
-        ? nodes.find((n) => n.id === node.data.parentId)
+      const parentNode = node.data.treeParentId
+        ? nodes.find((n) => n.id === node.data.treeParentId)
         : null;
 
       const siblingIds = edges
-        .filter((e) => e.source === node.data.parentId && e.target !== nodeId)
+        .filter((e) => e.source === node.data.treeParentId && e.target !== nodeId)
         .map((e) => e.target);
       const siblingLabels = nodes
         .filter((n) => siblingIds.includes(n.id))

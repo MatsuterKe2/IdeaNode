@@ -4,6 +4,7 @@ import MindMapCanvas from './components/MindMapCanvas';
 import AIChatPanel from './components/AIChatPanel';
 import Toolbar from './components/Toolbar';
 import NodeContextMenu from './components/NodeContextMenu';
+import ToastContainer from './components/ToastContainer';
 import { useMindMapStore } from './store/mindMapStore';
 
 export default function App() {
@@ -34,6 +35,7 @@ export default function App() {
       </div>
 
       <NodeContextMenu />
+      <ToastContainer />
     </div>
   );
 }

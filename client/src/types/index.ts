@@ -6,11 +6,15 @@ export type IdeaNodeData = {
   description: string;
   color: string;
   isRoot: boolean;
-  parentId: string | null;
+  treeParentId: string | null;
   aiConversation: { role: 'user' | 'assistant'; content: string }[];
+  nodeType: 'idea' | 'group';
+  groupId: string | null;
+  width: number | null;
+  height: number | null;
 };
 
-export type IdeaFlowNode = Node<IdeaNodeData, 'idea'>;
+export type IdeaFlowNode = Node<IdeaNodeData, 'idea' | 'group'>;
 
 export type IdeaFlowEdge = RFEdge & {
   data?: {
