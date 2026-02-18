@@ -31,6 +31,8 @@ export const getEdges = (projectId: string) =>
   fetch(`${BASE}/projects/${projectId}/edges`).then(r => json<Edge[]>(r));
 export const createEdge = (projectId: string, edge: Partial<Edge>) =>
   fetch(`${BASE}/projects/${projectId}/edges`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(edge) }).then(r => json<Edge>(r));
+export const updateEdge = (id: string, data: Partial<Edge>) =>
+  fetch(`${BASE}/edges/${id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) }).then(r => json<Edge>(r));
 export const deleteEdge = (id: string) =>
   fetch(`${BASE}/edges/${id}`, { method: 'DELETE' }).then(r => json<any>(r));
 

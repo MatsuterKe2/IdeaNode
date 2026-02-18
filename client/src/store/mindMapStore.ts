@@ -9,6 +9,9 @@ import {
 import type { IdeaFlowNode, IdeaFlowEdge } from '../types';
 import type { Project, ChatMessage, IdeaNode, Edge } from 'shared/src/types';
 import * as api from '../api/client';
+import type { ExportStructure, ExportMetadata } from '../utils/importExportTypes';
+import { autoLayout } from '../utils/import';
+import { computeAutoLayout, type ArrangeOptions } from '../utils/autoArrange';
 
 const EDGE_STYLE = { stroke: '#64748b' };
 
@@ -122,6 +125,9 @@ interface MindMapState {
   contextMenu: { x: number; y: number; nodeId: string; selectedNodeIds?: string[] } | null;
   setContextMenu: (menu: { x: number; y: number; nodeId: string; selectedNodeIds?: string[] } | null) => void;
 
+  // Auto arrange
+  autoArrange: (options: ArrangeOptions) => Promise<void>;
+
   // Group actions
   groupSelectedNodes: (selectedNodeIds: string[]) => Promise<void>;
   ungroupNodes: (groupId: string) => Promise<void>;
@@ -129,8 +135,17 @@ interface MindMapState {
   addNodeToGroup: (nodeId: string, groupId: string) => Promise<void>;
   updateGroupSize: (id: string, width: number, height: number) => void;
 
+  // Import/Export
+  importNodes: (
+    structure: ExportStructure,
+    metadata: ExportMetadata | null,
+    mode: 'new_project' | 'merge',
+    projectName?: string
+  ) => Promise<void>;
+
   // Toast
   toasts: Toast[];
+  fitViewTrigger: number;
   addToast: (message: string, type?: 'success' | 'error' | 'info') => void;
   removeToast: (id: string) => void;
 }
@@ -148,6 +163,7 @@ export const useMindMapStore = create<MindMapState>((set, get) => ({
   saveTimeout: null,
   contextMenu: null,
   toasts: [],
+  fitViewTrigger: 0,
 
   loadProjects: async () => {
     const projects = await api.getProjects();
@@ -181,7 +197,7 @@ export const useMindMapStore = create<MindMapState>((set, get) => ({
   selectProject: async (id: string) => {
     set({ currentProjectId: id, selectedNodeId: null, chatPanelOpen: false });
     const [rawNodes, rawEdges] = await Promise.all([api.getNodes(id), api.getEdges(id)]);
-    set({ nodes: sortNodes(rawNodes.map(toFlowNode)), edges: rawEdges.map(toFlowEdge) });
+    set((s) => ({ nodes: sortNodes(rawNodes.map(toFlowNode)), edges: rawEdges.map(toFlowEdge), fitViewTrigger: s.fitViewTrigger + 1 }));
   },
 
   onNodesChange: (changes) => {
@@ -427,6 +443,74 @@ export const useMindMapStore = create<MindMapState>((set, get) => ({
 
   setContextMenu: (menu) => set({ contextMenu: menu }),
 
+  // Auto arrange
+  autoArrange: async (options) => {
+    const { nodes, edges } = get();
+    const optionsWithViewport = {
+      ...options,
+      viewport: { width: window.innerWidth, height: window.innerHeight },
+    };
+    const result = computeAutoLayout(nodes, edges, optionsWithViewport);
+
+    // ローカルstate更新（位置 + サイズ + 色）
+    set((s) => ({
+      nodes: sortNodes(s.nodes.map((n) => {
+        const newPos = result.positions.get(n.id);
+        const newSize = result.groupSizes.get(n.id);
+        const newColor = result.nodeColors.get(n.id);
+        if (!newPos && !newSize && !newColor) return n;
+        return {
+          ...n,
+          ...(newPos ? { position: newPos } : {}),
+          ...(newSize ? { style: { ...n.style, width: newSize.width, height: newSize.height } } : {}),
+          data: {
+            ...n.data,
+            ...(newSize ? { width: newSize.width, height: newSize.height } : {}),
+            ...(newColor ? { color: newColor } : {}),
+          },
+        };
+      })),
+      edges: s.edges.map((e) => {
+        const newHandles = result.edgeHandles.get(e.id);
+        if (!newHandles) return e;
+        return { ...e, sourceHandle: newHandles.sourceHandle, targetHandle: newHandles.targetHandle };
+      }),
+    }));
+
+    // バックエンドに永続化
+    const updatePromises: Promise<any>[] = [];
+    const updatedNodeIds = new Set<string>();
+    for (const [nodeId, pos] of result.positions) {
+      const node = get().nodes.find((n) => n.id === nodeId);
+      const newSize = result.groupSizes.get(nodeId);
+      const newColor = result.nodeColors.get(nodeId);
+      updatedNodeIds.add(nodeId);
+      updatePromises.push(api.updateNode(nodeId, {
+        positionX: pos.x,
+        positionY: pos.y,
+        ...(newSize && node?.data.nodeType === 'group' ? { width: newSize.width, height: newSize.height } : {}),
+        ...(newColor ? { color: newColor } : {}),
+      }));
+    }
+    // 位置変更なしだが色だけ変更されたノード
+    for (const [nodeId, color] of result.nodeColors) {
+      if (!updatedNodeIds.has(nodeId)) {
+        updatePromises.push(api.updateNode(nodeId, { color }));
+      }
+    }
+    for (const [edgeId, handles] of result.edgeHandles) {
+      updatePromises.push(api.updateEdge(edgeId, {
+        sourceHandle: handles.sourceHandle,
+        targetHandle: handles.targetHandle,
+      }));
+    }
+    await Promise.all(updatePromises);
+
+    const count = result.positions.size;
+    get().addToast(`${count}個のノードを自動整列しました`, 'success');
+    set((s) => ({ fitViewTrigger: s.fitViewTrigger + 1 }));
+  },
+
   // Group actions
   groupSelectedNodes: async (selectedNodeIds: string[]) => {
     const projectId = get().currentProjectId;
@@ -604,6 +688,188 @@ export const useMindMapStore = create<MindMapState>((set, get) => ({
       ),
     }));
     api.updateNode(id, { width, height });
+  },
+
+  // Import/Export
+  importNodes: async (structure, metadata, mode, projectName) => {
+    let projectId = get().currentProjectId;
+
+    if (mode === 'new_project') {
+      const name = projectName || 'インポート';
+      const project = await api.createProject(name);
+      set((s) => ({ projects: [project, ...s.projects], currentProjectId: project.id, nodes: [], edges: [] }));
+      projectId = project.id;
+    }
+
+    if (!projectId) return;
+
+    // ポジション計算: メタデータがあればそこから、なければ自動レイアウト
+    const positions = metadata?.positions || autoLayout(structure);
+    const colors = metadata?.colors || {};
+    const conversations = metadata?.ai_conversations || {};
+    const edgeDetails = metadata?.edge_details || {};
+
+    // 短縮ID → 新UUID マッピング
+    const shortToUuid = new Map<string, string>();
+
+    // id_mapがあればUUID復元を試みる（マージ時）
+    if (metadata?.id_map && mode === 'merge') {
+      for (const [shortId, uuid] of Object.entries(metadata.id_map)) {
+        shortToUuid.set(shortId, uuid);
+      }
+    }
+
+    // グループノードを先に作成
+    for (const [shortId, group] of Object.entries(structure.groups)) {
+      const existingUuid = shortToUuid.get(shortId);
+      const existingNode = existingUuid ? get().nodes.find((n) => n.id === existingUuid) : null;
+      const pos = positions[shortId] || { x: 0, y: 0 };
+
+      if (existingNode && mode === 'merge') {
+        // 既存グループを更新
+        await api.updateNode(existingNode.id, { label: group.label });
+        set((s) => ({
+          nodes: s.nodes.map((n) =>
+            n.id === existingNode.id ? { ...n, data: { ...n.data, label: group.label } } : n
+          ),
+        }));
+      } else {
+        // 新規グループ作成
+        const node = await api.createNode(projectId, {
+          label: group.label,
+          nodeType: 'group',
+          positionX: pos.x,
+          positionY: pos.y,
+          width: pos.width || 300,
+          height: pos.height || 200,
+          color: colors[shortId] || '#8b5cf6',
+        });
+        shortToUuid.set(shortId, node.id);
+        set((s) => ({ nodes: sortNodes([...s.nodes, toFlowNode(node)]) }));
+      }
+    }
+
+    // 通常ノードを作成（親ノードが先に存在する必要があるので、ルートから順に処理）
+    const nodeEntries = Object.entries(structure.nodes);
+    const created = new Set<string>();
+    const createNode = async (shortId: string, nodeData: typeof structure.nodes[string]) => {
+      if (created.has(shortId)) return;
+      created.add(shortId);
+
+      // 親が構造内にいるなら先に作成
+      if (nodeData.parent && structure.nodes[nodeData.parent] && !created.has(nodeData.parent)) {
+        await createNode(nodeData.parent, structure.nodes[nodeData.parent]);
+      }
+
+      const existingUuid = shortToUuid.get(shortId);
+      const existingNode = existingUuid ? get().nodes.find((n) => n.id === existingUuid) : null;
+      const pos = positions[shortId] || { x: 0, y: 0 };
+
+      if (existingNode && mode === 'merge') {
+        // 既存ノードを更新
+        const updates: Partial<IdeaNode> = { label: nodeData.label };
+        if (nodeData.description !== undefined) updates.description = nodeData.description;
+        await api.updateNode(existingNode.id, updates);
+        set((s) => ({
+          nodes: s.nodes.map((n) =>
+            n.id === existingNode.id
+              ? { ...n, data: { ...n.data, label: nodeData.label, ...(nodeData.description !== undefined ? { description: nodeData.description } : {}) } }
+              : n
+          ),
+        }));
+      } else {
+        // 新規ノード作成
+        const treeParentId = nodeData.parent ? (shortToUuid.get(nodeData.parent) || null) : null;
+        // グループ所属確認
+        let groupId: string | null = null;
+        for (const [gId, group] of Object.entries(structure.groups)) {
+          if (group.members.includes(shortId)) {
+            groupId = shortToUuid.get(gId) || null;
+            break;
+          }
+        }
+
+        const conv = conversations[shortId];
+        const node = await api.createNode(projectId, {
+          label: nodeData.label,
+          description: nodeData.description || '',
+          isRoot: nodeData.root || false,
+          positionX: pos.x,
+          positionY: pos.y,
+          treeParentId,
+          color: colors[shortId] || '#3b82f6',
+          groupId,
+          ...(conv ? { aiConversation: conv as { role: 'user' | 'assistant'; content: string }[] } : {}),
+        });
+        shortToUuid.set(shortId, node.id);
+        set((s) => ({ nodes: sortNodes([...s.nodes, toFlowNode(node)]) }));
+
+        // 親がある場合はtreeエッジを作成
+        if (treeParentId) {
+          const edge = await api.createEdge(projectId, {
+            source: treeParentId,
+            target: node.id,
+            type: 'tree',
+            sourceHandle: 'right',
+            targetHandle: 'left',
+          });
+          set((s) => ({ edges: [...s.edges, toFlowEdge(edge)] }));
+        }
+      }
+    };
+
+    for (const [shortId, nodeData] of nodeEntries) {
+      await createNode(shortId, nodeData);
+    }
+
+    // Crosslink エッジを作成
+    for (let i = 0; i < structure.edges.length; i++) {
+      const edgeDef = structure.edges[i];
+      const sourceUuid = shortToUuid.get(edgeDef.from);
+      const targetUuid = shortToUuid.get(edgeDef.to);
+      if (!sourceUuid || !targetUuid) continue;
+
+      // 既存チェック（マージ時）
+      if (mode === 'merge') {
+        const exists = get().edges.some(
+          (e) => e.source === sourceUuid && e.target === targetUuid
+        );
+        if (exists) continue;
+      }
+
+      const detail = edgeDetails[i];
+      const edge = await api.createEdge(projectId, {
+        source: sourceUuid,
+        target: targetUuid,
+        type: 'crosslink',
+        sourceHandle: detail?.sourceHandle || 'right',
+        targetHandle: detail?.targetHandle || 'left',
+      });
+      set((s) => ({ edges: [...s.edges, toFlowEdge(edge)] }));
+    }
+
+    // 削除処理（マージモードで、id_mapに含まれるがstructureにないノード）
+    if (mode === 'merge' && metadata?.id_map) {
+      const structureIds = new Set([
+        ...Object.keys(structure.nodes),
+        ...Object.keys(structure.groups),
+      ]);
+      for (const [shortId, uuid] of Object.entries(metadata.id_map)) {
+        if (!structureIds.has(shortId)) {
+          const existing = get().nodes.find((n) => n.id === uuid);
+          if (existing) {
+            await api.deleteNode(uuid);
+            set((s) => ({
+              nodes: sortNodes(s.nodes.filter((n) => n.id !== uuid)),
+              edges: s.edges.filter((e) => e.source !== uuid && e.target !== uuid),
+            }));
+          }
+        }
+      }
+    }
+
+    const totalNodes = Object.keys(structure.nodes).length + Object.keys(structure.groups).length;
+    get().addToast(`${totalNodes}個のノードをインポートしました`, 'success');
   },
 
   // Toast

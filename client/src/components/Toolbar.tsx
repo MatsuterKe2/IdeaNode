@@ -1,5 +1,7 @@
-import { useState } from 'react';
+import { useState, useCallback } from 'react';
 import { useMindMapStore } from '../store/mindMapStore';
+import { generateYaml, downloadYaml } from '../utils/export';
+import ImportPreviewDialog from './ImportPreviewDialog';
 
 const SHORTCUTS = [
   { keys: 'ダブルクリック (空白)', desc: 'ノード追加' },
@@ -17,15 +19,22 @@ const SHORTCUTS = [
 export default function Toolbar() {
   const [showProjectMenu, setShowProjectMenu] = useState(false);
   const [showHelp, setShowHelp] = useState(false);
+  const [showIOMenu, setShowIOMenu] = useState(false);
   const [newProjectName, setNewProjectName] = useState('');
+  const [importDialog, setImportDialog] = useState<{ open: boolean; mode: 'file' | 'text' }>({ open: false, mode: 'file' });
 
   const projects = useMindMapStore((s) => s.projects);
   const currentProjectId = useMindMapStore((s) => s.currentProjectId);
   const createProject = useMindMapStore((s) => s.createProject);
   const deleteProject = useMindMapStore((s) => s.deleteProject);
   const selectProject = useMindMapStore((s) => s.selectProject);
+  const nodes = useMindMapStore((s) => s.nodes);
+  const edges = useMindMapStore((s) => s.edges);
+  const addToast = useMindMapStore((s) => s.addToast);
+  const autoArrange = useMindMapStore((s) => s.autoArrange);
 
   const currentProject = projects.find((p) => p.id === currentProjectId);
+  const selectedNodes = nodes.filter((n) => n.selected);
 
   const handleCreate = async () => {
     if (!newProjectName.trim()) return;
@@ -34,94 +43,206 @@ export default function Toolbar() {
     setShowProjectMenu(false);
   };
 
+  const handleExportProject = useCallback(() => {
+    if (!currentProject || nodes.length === 0) {
+      addToast('エクスポートするノードがありません', 'error');
+      return;
+    }
+    const yamlContent = generateYaml(nodes, edges, currentProject.name, { scope: 'project' });
+    downloadYaml(yamlContent, currentProject.name);
+    addToast('プロジェクトをエクスポートしました', 'success');
+    setShowIOMenu(false);
+  }, [nodes, edges, currentProject, addToast]);
+
+  const handleExportSelection = useCallback(() => {
+    if (!currentProject || selectedNodes.length === 0) return;
+    const selectedIds = selectedNodes.map((n) => n.id);
+    const yamlContent = generateYaml(nodes, edges, currentProject.name, { scope: 'selection', selectedNodeIds: selectedIds });
+    downloadYaml(yamlContent, `${currentProject.name}_selection`);
+    addToast(`${selectedNodes.length}個のノードをエクスポートしました`, 'success');
+    setShowIOMenu(false);
+  }, [nodes, edges, selectedNodes, currentProject, addToast]);
+
   return (
-    <div className="h-full bg-white border-b border-gray-200 flex items-center px-5 z-30 shadow-sm flex-shrink-0">
-      <h1 style={{ fontSize: 36 }} className="font-bold text-gray-800 mr-5 leading-none">IdeaNode</h1>
+    <>
+      <div className="h-full bg-white border-b border-gray-200 flex items-center px-5 z-30 shadow-sm flex-shrink-0">
+        <h1 style={{ fontSize: 36 }} className="font-bold text-gray-800 mr-5 leading-none">IdeaNode</h1>
 
-      <div className="relative">
-        <button
-          onClick={() => setShowProjectMenu(!showProjectMenu)}
-          className="px-4 py-2 border border-gray-300 rounded-lg text-base hover:bg-gray-50 flex items-center gap-2"
-        >
-          <span>{currentProject?.name || 'プロジェクト選択'}</span>
-          <span className="text-gray-400">▼</span>
-        </button>
+        <div className="relative">
+          <button
+            onClick={() => setShowProjectMenu(!showProjectMenu)}
+            className="px-4 py-2 border border-gray-300 rounded-lg text-base hover:bg-gray-50 flex items-center gap-2"
+          >
+            <span>{currentProject?.name || 'プロジェクト選択'}</span>
+            <span className="text-gray-400">▼</span>
+          </button>
 
-        {showProjectMenu && (
-          <>
-            <div className="fixed inset-0 z-40" onClick={() => setShowProjectMenu(false)} />
-            <div className="absolute top-full left-0 mt-1 w-72 bg-white rounded-lg shadow-xl border border-gray-200 z-50 py-1">
-              {projects.map((p) => (
-                <div
-                  key={p.id}
-                  className={`px-4 py-2.5 flex items-center justify-between hover:bg-gray-50 cursor-pointer ${
-                    p.id === currentProjectId ? 'bg-blue-50' : ''
-                  }`}
-                >
-                  <span
-                    className="text-base flex-1 truncate"
-                    onClick={() => { selectProject(p.id); setShowProjectMenu(false); }}
+          {showProjectMenu && (
+            <>
+              <div className="fixed inset-0 z-40" onClick={() => setShowProjectMenu(false)} />
+              <div className="absolute top-full left-0 mt-1 w-72 bg-white rounded-lg shadow-xl border border-gray-200 z-50 py-1">
+                {projects.map((p) => (
+                  <div
+                    key={p.id}
+                    className={`px-4 py-2.5 flex items-center justify-between hover:bg-gray-50 cursor-pointer ${
+                      p.id === currentProjectId ? 'bg-blue-50' : ''
+                    }`}
                   >
-                    {p.name}
-                  </span>
-                  <button
-                    onClick={(e) => { e.stopPropagation(); deleteProject(p.id); }}
-                    className="text-gray-400 hover:text-red-500 text-sm ml-2"
-                  >
-                    ✕
-                  </button>
-                </div>
-              ))}
-              <div className="border-t border-gray-100 mt-1 pt-1 px-4 py-2">
-                <div className="flex gap-2">
-                  <input
-                    value={newProjectName}
-                    onChange={(e) => setNewProjectName(e.target.value)}
-                    onKeyDown={(e) => { if (e.key === 'Enter') handleCreate(); }}
-                    placeholder="新しいプロジェクト"
-                    className="flex-1 px-3 py-1.5 border border-gray-300 rounded text-base focus:outline-none focus:ring-1 focus:ring-blue-400"
-                  />
-                  <button
-                    onClick={handleCreate}
-                    className="px-4 py-1.5 bg-blue-500 text-white rounded text-base hover:bg-blue-600"
-                  >
-                    作成
-                  </button>
+                    <span
+                      className="text-base flex-1 truncate"
+                      onClick={() => { selectProject(p.id); setShowProjectMenu(false); }}
+                    >
+                      {p.name}
+                    </span>
+                    <button
+                      onClick={(e) => { e.stopPropagation(); deleteProject(p.id); }}
+                      className="text-gray-400 hover:text-red-500 text-sm ml-2"
+                    >
+                      ✕
+                    </button>
+                  </div>
+                ))}
+                <div className="border-t border-gray-100 mt-1 pt-1 px-4 py-2">
+                  <div className="flex gap-2">
+                    <input
+                      value={newProjectName}
+                      onChange={(e) => setNewProjectName(e.target.value)}
+                      onKeyDown={(e) => { if (e.key === 'Enter') handleCreate(); }}
+                      placeholder="新しいプロジェクト"
+                      className="flex-1 px-3 py-1.5 border border-gray-300 rounded text-base focus:outline-none focus:ring-1 focus:ring-blue-400"
+                    />
+                    <button
+                      onClick={handleCreate}
+                      className="px-4 py-1.5 bg-blue-500 text-white rounded text-base hover:bg-blue-600"
+                    >
+                      作成
+                    </button>
+                  </div>
                 </div>
               </div>
-            </div>
-          </>
-        )}
-      </div>
+            </>
+          )}
+        </div>
 
-      <div className="ml-auto relative">
-        <button
-          onClick={() => setShowHelp(!showHelp)}
-          className="w-8 h-8 rounded-full border border-gray-300 flex items-center justify-center text-gray-500 hover:bg-gray-50 hover:text-gray-700 transition-colors text-sm"
-          title="ショートカット一覧"
-        >
-          ?
-        </button>
+        <div className="ml-auto flex items-center gap-2">
+          {/* 整列ボタン（ワンクリック） */}
+          <button
+            onClick={() => {
+              if (selectedNodes.length >= 2) {
+                autoArrange({ direction: 'radial', scope: 'selection', selectedNodeIds: selectedNodes.map(n => n.id) });
+              } else {
+                autoArrange({ direction: 'radial', scope: 'project' });
+              }
+            }}
+            disabled={nodes.length === 0}
+            className="px-3 py-1.5 border border-gray-300 rounded-lg text-sm hover:bg-gray-50 flex items-center gap-1.5 text-gray-600 disabled:opacity-40 disabled:cursor-not-allowed"
+            title={selectedNodes.length >= 2 ? `選択${selectedNodes.length}個を整列` : 'ノードを自動整列'}
+          >
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+              <rect x="1" y="3" width="4" height="3" rx="0.5" />
+              <rect x="8" y="1" width="4" height="3" rx="0.5" />
+              <rect x="8" y="6" width="4" height="3" rx="0.5" />
+              <rect x="8" y="11" width="4" height="3" rx="0.5" />
+              <path d="M5 4.5h1.5v7H8M7.5 2.5H8M7.5 7.5H8" />
+            </svg>
+            <span>整列</span>
+          </button>
 
-        {showHelp && (
-          <>
-            <div className="fixed inset-0 z-40" onClick={() => setShowHelp(false)} />
-            <div className="absolute top-full right-0 mt-1 w-80 bg-white rounded-lg shadow-xl border border-gray-200 z-50 py-2">
-              <div className="px-4 py-1.5 text-xs font-semibold text-gray-500 uppercase tracking-wide">
-                ショートカット
-              </div>
-              {SHORTCUTS.map((s, i) => (
-                <div key={i} className="px-4 py-1.5 flex items-center justify-between text-sm">
-                  <span className="text-gray-600">{s.desc}</span>
-                  <span className="text-xs text-gray-400 bg-gray-100 px-2 py-0.5 rounded font-mono">
-                    {s.keys}
-                  </span>
+          {/* 入出力メニュー */}
+          <div className="relative">
+            <button
+              onClick={() => setShowIOMenu(!showIOMenu)}
+              className="px-3 py-1.5 border border-gray-300 rounded-lg text-sm hover:bg-gray-50 flex items-center gap-1.5 text-gray-600"
+              title="インポート / エクスポート"
+            >
+              <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M8 3v10M5 6l3-3 3 3M5 10l3 3 3-3" />
+              </svg>
+              <span>入出力</span>
+              <span className="text-gray-400 text-xs">▼</span>
+            </button>
+
+            {showIOMenu && (
+              <>
+                <div className="fixed inset-0 z-40" onClick={() => setShowIOMenu(false)} />
+                <div className="absolute top-full right-0 mt-1 w-56 bg-white rounded-lg shadow-xl border border-gray-200 z-50 py-1">
+                  <div className="px-3 py-1.5 text-xs font-semibold text-gray-400 uppercase tracking-wide">
+                    エクスポート
+                  </div>
+                  <button
+                    onClick={handleExportProject}
+                    disabled={!currentProjectId || nodes.length === 0}
+                    className="w-full text-left px-4 py-2 text-sm hover:bg-gray-50 text-gray-700 disabled:opacity-40 disabled:cursor-not-allowed"
+                  >
+                    プロジェクト全体
+                  </button>
+                  <button
+                    onClick={handleExportSelection}
+                    disabled={selectedNodes.length === 0}
+                    className="w-full text-left px-4 py-2 text-sm hover:bg-gray-50 text-gray-700 disabled:opacity-40 disabled:cursor-not-allowed"
+                  >
+                    選択ノード ({selectedNodes.length})
+                  </button>
+
+                  <div className="border-t border-gray-100 my-1" />
+
+                  <div className="px-3 py-1.5 text-xs font-semibold text-gray-400 uppercase tracking-wide">
+                    インポート
+                  </div>
+                  <button
+                    onClick={() => { setImportDialog({ open: true, mode: 'file' }); setShowIOMenu(false); }}
+                    className="w-full text-left px-4 py-2 text-sm hover:bg-gray-50 text-gray-700"
+                  >
+                    ファイルから
+                  </button>
+                  <button
+                    onClick={() => { setImportDialog({ open: true, mode: 'text' }); setShowIOMenu(false); }}
+                    className="w-full text-left px-4 py-2 text-sm hover:bg-gray-50 text-gray-700"
+                  >
+                    テキストから貼り付け
+                  </button>
                 </div>
-              ))}
-            </div>
-          </>
-        )}
+              </>
+            )}
+          </div>
+
+          {/* ヘルプボタン */}
+          <div className="relative">
+            <button
+              onClick={() => setShowHelp(!showHelp)}
+              className="w-8 h-8 rounded-full border border-gray-300 flex items-center justify-center text-gray-500 hover:bg-gray-50 hover:text-gray-700 transition-colors text-sm"
+              title="ショートカット一覧"
+            >
+              ?
+            </button>
+
+            {showHelp && (
+              <>
+                <div className="fixed inset-0 z-40" onClick={() => setShowHelp(false)} />
+                <div className="absolute top-full right-0 mt-1 w-80 bg-white rounded-lg shadow-xl border border-gray-200 z-50 py-2">
+                  <div className="px-4 py-1.5 text-xs font-semibold text-gray-500 uppercase tracking-wide">
+                    ショートカット
+                  </div>
+                  {SHORTCUTS.map((s, i) => (
+                    <div key={i} className="px-4 py-1.5 flex items-center justify-between text-sm">
+                      <span className="text-gray-600">{s.desc}</span>
+                      <span className="text-xs text-gray-400 bg-gray-100 px-2 py-0.5 rounded font-mono">
+                        {s.keys}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </>
+            )}
+          </div>
+        </div>
       </div>
-    </div>
+
+      <ImportPreviewDialog
+        open={importDialog.open}
+        onClose={() => setImportDialog({ open: false, mode: 'file' })}
+        initialMode={importDialog.mode}
+      />
+    </>
   );
 }
