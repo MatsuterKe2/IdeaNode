@@ -1,4 +1,4 @@
-import { useCallback, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   ReactFlow,
   Controls,
@@ -26,7 +26,7 @@ const edgeTypes = { deletable: DeletableEdge };
 export default function MindMapCanvas() {
   const reactFlowWrapper = useRef<HTMLDivElement>(null);
   const edgeReconnectSuccessful = useRef(true);
-  const { screenToFlowPosition } = useReactFlow();
+  const { screenToFlowPosition, fitView } = useReactFlow();
   const [draggingNodeId, setDraggingNodeId] = useState<string | null>(null);
   const trashRef = useRef<TrashDropZoneHandle>(null);
 
@@ -42,6 +42,14 @@ export default function MindMapCanvas() {
   const reconnectEdgeInStore = useMindMapStore((s) => s.reconnectEdge);
   const setSelectedEdgeId = useMindMapStore((s) => s.setSelectedEdgeId);
   const currentProjectId = useMindMapStore((s) => s.currentProjectId);
+  const fitViewTrigger = useMindMapStore((s) => s.fitViewTrigger);
+
+  // autoArrange/プロジェクト切替後にビューポートを調整
+  useEffect(() => {
+    if (fitViewTrigger > 0) {
+      setTimeout(() => fitView({ padding: 0.3, maxZoom: 1.2, duration: 300 }), 50);
+    }
+  }, [fitViewTrigger, fitView]);
 
   // ダブルクリックで空白にノード作成
   const handlePaneDoubleClick = useCallback(

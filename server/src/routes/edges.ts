@@ -20,6 +20,22 @@ app.post('/projects/:projectId/edges', async (c) => {
   return c.json(formatEdge(edge), 201);
 });
 
+app.patch('/edges/:id', async (c) => {
+  const { id } = c.req.param();
+  const body = await c.req.json();
+  const sets: string[] = [];
+  const vals: any[] = [];
+  if (body.sourceHandle !== undefined) { sets.push('source_handle = ?'); vals.push(body.sourceHandle); }
+  if (body.targetHandle !== undefined) { sets.push('target_handle = ?'); vals.push(body.targetHandle); }
+  if (body.label !== undefined) { sets.push('label = ?'); vals.push(body.label); }
+  if (sets.length > 0) {
+    vals.push(id);
+    db.prepare(`UPDATE edges SET ${sets.join(', ')} WHERE id = ?`).run(...vals);
+  }
+  const row = db.prepare('SELECT * FROM edges WHERE id = ?').get(id);
+  return c.json(formatEdge(row));
+});
+
 app.delete('/edges/:id', (c) => {
   const { id } = c.req.param();
   db.prepare('DELETE FROM edges WHERE id = ?').run(id);
